@@ -5,6 +5,11 @@ const gutil = require('gulp-util');
 const sourcemaps = require('gulp-sourcemaps');
 const runSequence = require('run-sequence');
 const browserSync = require('browser-sync');
+const browserify = require('browserify');
+const uglify = require('gulp-uglify');
+const rename = require('gulp-rename');
+const buffer = require('vinyl-buffer');
+const source = require('vinyl-source-stream');
 
 const paths = {
   jekyllDir: '',
@@ -32,6 +37,7 @@ gulp.task('serve', ['build'], function() {
       '!_dev/stylesheets/vendor/bourbon/**/*',
       '!_dev/stylesheets/vendor/bourbon-neat/**/*',
       '!_dev/stylesheets/vendor/normalize.css/**/*',
+      '!_dev/stylesheets/vendor/bigfishtv-turret/**/*'
     ], 
     [
       'build:sass', 
@@ -41,6 +47,9 @@ gulp.task('serve', ['build'], function() {
 
   // Watch app .js files
   gulp.watch('_dev/js/**/*.js', ['build:javascript:watch', 'build:jekyll:watch']);
+
+  // Watch images
+  gulp.watch('_dev/img/**/*');
 
   // Watch Jekyll posts
   // gulp.watch('_posts/**/*.+(md|markdown|MD)', ['build:jekyll:watch']);
@@ -65,21 +74,32 @@ gulp.task('serve', ['build'], function() {
 });
 
 gulp.task('build', function(cb) {
-  runSequence(['build:sass', 'build:javascript'], 'build:jekyll', cb);
-});
-
-gulp.task('build:sass', ['copy-normalize', 'copy-bourbon', 'copy-bourbon-neat'], function() {
-  return gulp.src(paths.sassSource)
-    .pipe(sourcemaps.init())
-    .pipe(sass({ outputStyle: 'compressed' })
-      .on('error', sass.logError)
-    )
-    .pipe(sourcemaps.write('./maps'))
-    .pipe(gulp.dest('assets/presentation/css'));
+  runSequence(['build:sass', 'build:javascript', 'build:images', 'build:fonts'], 'build:jekyll', cb);
 });
 
 gulp.task('build:javascript', function() {
-  return;
+  var defaultStream = browserify({
+    entries: '_dev/js/start.js',
+    debug: true,
+  });
+
+  var stream = defaultStream.bundle()
+    .pipe(source('components.js'))
+    .pipe(buffer())
+    .pipe(rename({ basename: 'le' }))
+    .pipe(gulp.dest('assets/presentation/js'));
+
+  stream
+    .pipe(sourcemaps.init({ loadMaps: true }))
+    .pipe(uglify())
+    .on('error', gutil.log)
+    .pipe(rename({
+      suffix: '.min',
+    }))
+    .pipe(sourcemaps.write('.'))
+    .pipe(gulp.dest('assets/presentation/js'));
+
+  return stream;
 });
 
 gulp.task('build:javascript:watch', ['build:javascript'], function(cb) {
@@ -99,70 +119,27 @@ gulp.task('build:jekyll:watch', ['build:jekyll'], function(cb) {
   cb();
 });
 
-// watchers
+// Images
+gulp.task('build:images', function() {
+  return gulp.src('_dev/img/**/*')
+      .pipe(gulp.dest('assets/presentation/img'));
+});
 
+gulp.task('build:fonts', function() {
+  return gulp.src('node_modules/font-awesome/fonts/**/*')
+    .pipe(gulp.dest('assets/presentation/fonts'));
+});
 
-// const gulp = require('gulp');
-
-
-
-
-// const child = require('child_process');
-
-
-// // Serves the Jekyll site
-
-
-// const siteRoot = '_site';
-// const sassSource = '_dev/stylesheets/le-main.scss';
-
-// gulp.task('jekyll', function() {
-//   const jekyll = child.spawn('jekyll', [
-//     'build', 
-//     '--watch',
-//     '--incremental',
-//     '--drafts'
-//   ]);
-// });
-
-// gulp.task('serve', function() {
-//   browserSync.init({
-//     files: [siteRoot + '/**'],
-//     port: 4000,
-//     server: siteRoot
-//   });
-
-//   gulp.watch(
-//     [
-//       '_dev/stylesheets/**/*.scss', 
-//       '!_dev/stylesheets/vendor'
-//     ], function(event) {
-//       runSequence('sass:publish');
-//     }
-//   );  
-// });
-
-// // Sass
-// gulp.task('sass', function() {
-//   runSequence(
-//     [
-//       'copy-bourbon', 
-//       'copy-bourbon-neat', 
-//       'copy-normalize'
-//     ],
-//     'sass:publish'
-//   );
-// });
-
-// gulp.task('sass:publish', function() {
-  // gulp.src(sassSource)
-  //   .pipe(sourcemaps.init())
-  //   .pipe(sass({ outputStyle: 'compressed' })
-  //     .on('error', sass.logError)
-  //   )
-  //   .pipe(sourcemaps.write('./maps'))    
-  //   .pipe(gulp.dest('assets/presentation/css'));    
-// });
+// Sass
+gulp.task('build:sass', ['copy-normalize', 'copy-bourbon', 'copy-bourbon-neat', 'copy-bigfishtv-turret'], function() {
+  return gulp.src(paths.sassSource)
+    .pipe(sourcemaps.init())
+    .pipe(sass({ outputStyle: 'compressed' })
+      .on('error', sass.logError)
+    )
+    .pipe(sourcemaps.write('./maps'))
+    .pipe(gulp.dest('assets/presentation/css'));
+});
 
 gulp.task('copy-normalize', function() {
   return gulp.src('node_modules/normalize.css/normalize.css')
@@ -177,4 +154,9 @@ gulp.task('copy-bourbon', function() {
 gulp.task('copy-bourbon-neat', function() {
   return gulp.src('node_modules/bourbon-neat/app/assets/stylesheets/**/*.scss')
       .pipe(gulp.dest('_dev/stylesheets/vendor/bourbon-neat/'));
+});
+
+gulp.task('copy-bigfishtv-turret', function() {
+  return gulp.src('node_modules/bigfishtv-turret/turret/**/*')
+      .pipe(gulp.dest('_dev/stylesheets/vendor/bigfishtv-turret/'));
 });
